@@ -1,5 +1,5 @@
 const express = require('express');
-const fb = require("fbkey");
+const appstate = require('fca-project-orion');
 const fs = require('fs');
 const path = require('path');
 const app = express();
@@ -7,7 +7,7 @@ const port = process.env.PORT || 3030;
 
 app.use(express.static('public'));
 
-app.get('/appstate', async (req, res) => {
+app.get('/appstate', (req, res) => {
   const email = req.query.e;
   const password = req.query.p;
 
@@ -17,33 +17,41 @@ app.get('/appstate', async (req, res) => {
 
   const filename = 'appstate.json';
 
-  // Check if appstate.json already exists
   if (fs.existsSync(filename)) {
     return res.status(400).send({ error: 'appstate.json already exists' });
   }
 
-  try {
-    const facebook = await fb.getAppstate(email, password);
-    const results = JSON.stringify(facebook, null, 2);
+  appstate({ email, password }, (err, api) => {
+    if (err) {
+      console.error('Error in appstate:', err);
+      return res.status(401).send({ error: err.message });
+    } else {
+      try {
+        const result = api.getAppState();
+        const results = JSON.stringify(result, null, 2);
 
-    fs.writeFileSync(filename, results);
-    console.log('[FBKEY] > Currently logged in...');
+        fs.writeFileSync(filename, results);
+        console.log('[FCA-PROJECT-ORION] > Currently logged ...');
 
-    res.type('json').send({ success: results });
+        res.type('json').send({ success: results });
+        api.logout();
 
-    setTimeout(() => {
-      fs.unlink(filename, (err) => {
-        if (err) {
-          console.error('Error deleting appstate.json:', err);
-        } else {
-          console.log('appstate.json deleted successfully');
-        }
-      });
-    }, 16000);
-  } catch (err) {
-    console.error('Error in fbkey:', err);
-    res.status(401).send({ error: err.message });
-  }
+        setTimeout(() => {
+          fs.unlink(filename, (err) => {
+            if (err) {
+              console.error('Error deleting appstate.json:', err);
+            } else {
+              console.log('appstate.json deleted successfully');
+            }
+          });
+        }, 16000);
+
+      } catch (e) {
+        console.error('Error processing result:', e);
+        res.status(500).json({ error: e.message });
+      }
+    }
+  });
 });
 
 app.get('/file', (req, res) => {
